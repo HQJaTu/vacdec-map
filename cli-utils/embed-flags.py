@@ -27,7 +27,6 @@ from typing import Tuple
 from lxml import etree  # lxml implements the ElementTree API, has better performance or more advanced features
 from lxml.html import fromstring
 import base64
-from cairosvg import svg2png
 from vacdec_map import CountryStatistics
 import logging
 
@@ -248,11 +247,54 @@ def save_map(filename: str, tree: etree.ElementTree) -> None:
     log.info("Wrote SVG into {}".format(filename))
 
 
-def save_map_png(tree: etree.ElementTree, output_filename: str) -> None:
+def save_map_png_cairo(tree: etree.ElementTree, output_filename: str) -> None:
+    """
+    Cairo is nearly working
+    :param tree:
+    :param output_filename:
+    :return:
+    """
+    from cairosvg import svg2png
+
     root = tree.getroot()
     svg = etree.tostring(root, pretty_print=False)
     svg2png(bytestring=svg, write_to=output_filename)
     log.info("Wrote PNG into {}".format(output_filename))
+
+
+def save_map_png_pyvips(tree: etree.ElementTree, output_filename: str) -> None:
+    import pyvips
+
+    root = tree.getroot()
+    svg = etree.tostring(root, pretty_print=False)
+    # image = pyvips.Image.new_from_buffer(svg, options="", dpi=300)
+    image = pyvips.Image.svgload_buffer(svg)
+    image.write_to_file(output_filename)
+    log.info("Wrote PNG into {}".format(output_filename))
+
+
+def save_map_png_html2image(svg_filename: str, output_filename: str) -> None:
+    from html2image import Html2Image
+    hti = Html2Image(browser='firefox')
+    hti.screenshot(other_file=svg_filename,
+                   size=(4500, 2234),
+                   save_as=output_filename)
+
+
+def save_map_png_inkscape(svg_filename: str, output_filename: str) -> None:
+    import subprocess
+
+    args = [
+        "/usr/bin/inkscape",
+        "--without-gui",
+        "-f", svg_filename,
+        "--export-area-page",
+        "-w", str(4500),
+        "-h", str(2234),
+        "--export-png", output_filename
+    ]
+    print(args)
+    subprocess.check_call(args)
 
 
 def main() -> None:
@@ -282,7 +324,10 @@ def main() -> None:
     save_map(args.world_map_svg_out, flag_svg)
 
     if args.png_output_file:
-        save_map_png(flag_svg, args.png_output_file)
+        # save_map_png_cairo(flag_svg, args.png_output_file)
+        # save_map_png_pyvips(flag_svg, args.png_output_file)
+        #save_map_png_html2image(args.world_map_svg_out, args.png_output_file)
+        save_map_png_inkscape(args.world_map_svg_out, args.png_output_file)
 
 
 if __name__ == "__main__":

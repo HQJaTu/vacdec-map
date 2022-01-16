@@ -35,25 +35,28 @@ See also:
 pip install -r requirements.txt
 ```
 
-### Binary libraries on Linux
-Your Linux distro will have package cairo. Install it.
-
-Cairo has other dependencies.
-python3-cairosvg
-
-## Binary libraries on Windows
-Cairo is bit of a problem on Windows.
-See https://www.cairographics.org/download/ for library bundles to install.
-
-
-## Source SVG map of the world
+### Source SVG map of the world
 Download
 https://commons.wikimedia.org/wiki/File:Carte_du_monde_vierge_(Allemagnes_séparées).svg
 
 Add layer "Flags" into it.
 
-## Flags of the world
+### Flags of the world
 Import flags from https://en.wikipedia.org/wiki/Gallery_of_sovereign_state_flags
 ```bash
 ./cli-utils/import-flags.py
 ```
+
+## PNG output
+Tested four different methods, only one is working.
+* https://cairosvg.org/
+  * Failing to render 100% correct file
+* https://github.com/libvips/pyvips
+  * Rendering will fail a lot and on multiple ways
+* https://github.com/vgalin/html2image
+  * Rendering will require Chrome browser
+  * Didn't test this properly.
+* https://inkscape.org/ on CLI
+  * Working perfectly!
+  * All fonts are rendered correctly.
+  * All flags render correctly.
