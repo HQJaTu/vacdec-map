@@ -17,7 +17,7 @@
 # Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 # Copyright (c) Jari Turkia
-
+import datetime
 import os
 import sys
 import io
@@ -149,6 +149,17 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         add_flag(flags_dir, tree, layer, country_alpha_2, x, y, width)
 
     log.info("Done adding {} flags.".format(len(flags_to_add)))
+
+    # Update the map with today's date
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    root = tree.getroot()
+    namespaces_for_xpath = {ns: url for ns, url in root.nsmap.items() if ns}
+    text_element_id = "map-updated-text"
+    text_element_id_encoded = fromstring(text_element_id)
+    updated_text_element = root.xpath(r'.//svg:tspan[@id="{}"]'.format(text_element_id_encoded.text),
+                                      namespaces=namespaces_for_xpath)
+    updated_text_element[0].text = today
+    log.info("Updated map with datestamp: {}".format(today))
 
 
 def add_flag(flags_dir: str, tree: etree.ElementTree, layer: etree.Element,
