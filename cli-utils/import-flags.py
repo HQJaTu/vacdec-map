@@ -24,7 +24,7 @@ import io
 import argparse
 import requests
 import re
-from pycountry import countries
+from pycountry import countries, db as pycountry_db
 import shutil
 import logging
 
@@ -56,6 +56,10 @@ def _get_http_client() -> requests.Session:
 
 
 def get_flag_list(s: requests.Session) -> dict:
+    extra_flags = [
+        ("FO", "Faroe Islands", "File:Flag of the Faroe Islands.svg")
+    ]
+
     page_query = {
         "action": "parse",
         "format": "json",
@@ -89,14 +93,6 @@ def get_flag_list(s: requests.Session) -> dict:
         "South Korea": "Korea, Republic of",
     }
 
-    image_query = {
-        "action": "query",
-        "format": "json",
-        "titles": None,  # Will be filled later
-        "prop": "imageinfo",
-        "iiprop": "url",
-    }
-
     flags_out = {}
     flag_iter = re.finditer(r'(File:[^|]+)\|\[\[[^|]+\|([^]]+)]]', page_data["parse"]["wikitext"])
     for flag_match in flag_iter:
@@ -126,32 +122,58 @@ def get_flag_list(s: requests.Session) -> dict:
                 raise LookupError(
                     "Country '{}' not found in DB nor exception-list! Cannot proceed.".format(country_name))
             country_data = country_data[0]
-        alpha_2 = country_data.alpha_2
-        db_name = country_data.name
 
-        image_query["titles"] = flag_file
-        response = s.get(WIKIPEDIA_API_BASE_URL, params=image_query, timeout=timeout)
-        if response.status_code != 200:
-            raise RuntimeError("Failed to request image data from API! HTTP/{}".format(response.status_code))
-        image_data = response.json()
-        # Wikipedia API internal working:
-        # If the flag is a link to a page (about the flag), then page ID will be that page's ID.
-        # If not, then page ID will be -1. We just need to figure out which is the case here.
-        page_id = list(image_data["query"]["pages"].keys())[0]
-        image_url = image_data["query"]["pages"][page_id]["imageinfo"][0]["url"]
+        flag_data = _get_flag_data(s, country_data, country_name, flag_file)
+        flags_out[country_data.alpha_2] = flag_data
+        flag_file = "File:Flag of the Faroe Islands.svg"
+        log.debug("{} ({}): {}, URL: {}".format(country_name, country_data.alpha_2, flag_file, flag_data['image_url']))
 
-        flags_out[alpha_2] = {
-            'wikipedia_name': country_name,
-            'ISO-3316_name': db_name,
-            'flag_file': flag_file,
-            'image_url': image_url,
-        }
+    log.info("Done listing {} flags from Wikipedia.".format(len(flags_out)))
 
-        log.debug("{} ({}): {}, URL: {}".format(country_name, alpha_2, flag_file, image_url))
+    for extra in extra_flags:
+        country_data = countries.get(alpha_2=extra[0])
+        country_name = extra[1]
+        flag_file = extra[2]
+        flag_data = _get_flag_data(s, country_data, country_name, flag_file)
+        log.debug("Extra flag {} ({}): {}, URL: {}".format(country_name, country_data.alpha_2, flag_file, flag_data['image_url']))
+        flags_out[country_data.alpha_2] = flag_data
 
-    log.info("Done listing flags.")
+    log.info("Did total of {} flags.".format(len(flags_out)))
 
     return flags_out
+
+
+def _get_flag_data(s: requests.Session, country_data: pycountry_db.Data,
+                   country_name: str, flag_file: str) -> dict:
+    alpha_2 = country_data.alpha_2
+    db_name = country_data.name
+
+    image_query = {
+        "action": "query",
+        "format": "json",
+        "titles": flag_file,
+        "prop": "imageinfo",
+        "iiprop": "url",
+    }
+
+    response = s.get(WIKIPEDIA_API_BASE_URL, params=image_query, timeout=timeout)
+    if response.status_code != 200:
+        raise RuntimeError("Failed to request image data from API! HTTP/{}".format(response.status_code))
+    image_data = response.json()
+    # Wikipedia API internal working:
+    # If the flag is a link to a page (about the flag), then page ID will be that page's ID.
+    # If not, then page ID will be -1. We just need to figure out which is the case here.
+    page_id = list(image_data["query"]["pages"].keys())[0]
+    image_url = image_data["query"]["pages"][page_id]["imageinfo"][0]["url"]
+
+    flag_data = {
+        'wikipedia_name': country_name,
+        'ISO-3316_name': db_name,
+        'flag_file': flag_file,
+        'image_url': image_url,
+    }
+
+    return flag_data
 
 
 def download_flag_list(s: requests.Session, list_of_flags: dict, dest_dir: str) -> None:
