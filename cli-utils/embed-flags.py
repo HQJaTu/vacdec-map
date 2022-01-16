@@ -17,6 +17,7 @@
 # Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 # Copyright (c) Jari Turkia
+
 import datetime
 import os
 import sys
@@ -26,6 +27,7 @@ from typing import Tuple
 from lxml import etree  # lxml implements the ElementTree API, has better performance or more advanced features
 from lxml.html import fromstring
 import base64
+from cairosvg import svg2png
 from vacdec_map import CountryStatistics
 import logging
 
@@ -238,12 +240,19 @@ def _calculate_new_size_for_fixed_width(width: int, height: int, new_width: int)
     return new_width, new_height
 
 
-def save_map(filename: str, tree: etree.ElementTree):
+def save_map(filename: str, tree: etree.ElementTree) -> None:
     root = tree.getroot()
     tree.write(filename, pretty_print=True)
     # str = etree.tostring(root, pretty_print=True)
 
     log.info("Wrote SVG into {}".format(filename))
+
+
+def save_map_png(tree: etree.ElementTree, output_filename: str) -> None:
+    root = tree.getroot()
+    svg = etree.tostring(root, pretty_print=False)
+    svg2png(bytestring=svg, write_to=output_filename)
+    log.info("Wrote PNG into {}".format(output_filename))
 
 
 def main() -> None:
@@ -258,6 +267,8 @@ def main() -> None:
                         help='Input SVG-file')
     parser.add_argument('--layer-name', default=DEFAULT_LAYER_NAME,
                         help="Layer to embed flags into. Default: {}".format(DEFAULT_LAYER_NAME))
+    parser.add_argument('--png-output-file',
+                        help="Optionally render the outputted SVG into PNG")
     args = parser.parse_args()
     _setup_logger()
 
@@ -269,6 +280,9 @@ def main() -> None:
     country_cert_stats = get_country_list(args.certs_dir)
     add_flags(args.flags_dir, flag_svg, flags_layer, country_cert_stats)
     save_map(args.world_map_svg_out, flag_svg)
+
+    if args.png_output_file:
+        save_map_png(flag_svg, args.png_output_file)
 
 
 if __name__ == "__main__":
