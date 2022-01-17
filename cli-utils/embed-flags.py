@@ -34,6 +34,10 @@ log = logging.getLogger(__name__)
 
 DEFAULT_LAYER_NAME = "Flags"
 
+VERTICAL_ALIGN_TOP = "top"
+VERTICAL_ALIGN_MIDDLE = "middle"
+VERTICAL_ALIGN_BOTTOM = "bottom"
+
 
 def _setup_logger() -> None:
     log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
@@ -53,6 +57,14 @@ def import_map_svg(filename: str, layer_name: str) -> Tuple[etree.ElementTree, e
     #    inkscape:label="Flags"
     #    style="display:inline">
 
+    layer = _find_layer(tree, layer_name)
+    if layer is None:
+        raise ValueError("Inkscape layer '{}' not found in SVG!".format(layer_name))
+
+    return tree, layer
+
+
+def _find_layer(tree: etree.ElementTree, layer_name: str) -> etree.Element:
     root = tree.getroot()
     namespaces_for_xpath = {ns: url for ns, url in root.nsmap.items() if ns}
     # layers = root.xpath(r'./svg:g', namespaces={'svg': root.nsmap['svg']})
@@ -60,9 +72,21 @@ def import_map_svg(filename: str, layer_name: str) -> Tuple[etree.ElementTree, e
     layer = root.xpath(r'./svg:g[@inkscape:label="{}"]'.format(layer_name_encoded.text),
                        namespaces=namespaces_for_xpath)
     if not layer:
-        raise ValueError("Inkscape layer '{}' not found in SVG!".format(layer_name))
+        return None
 
-    return tree, layer[0]
+    return layer[0]
+
+
+def _find_text_element(tree: etree.ElementTree, text_element_id: str) -> etree.Element:
+    root = tree.getroot()
+    namespaces_for_xpath = {ns: url for ns, url in root.nsmap.items() if ns}
+    text_element_id_encoded = fromstring(text_element_id)
+    text_element = root.xpath(r'.//svg:tspan[@id="{}"]'.format(text_element_id_encoded.text),
+                              namespaces=namespaces_for_xpath)
+    if not text_element:
+        return None
+
+    return text_element[0]
 
 
 def get_country_list(certs_dir: str) -> dict:
@@ -137,6 +161,12 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
     }
     big_flags = ["ae", "cv", "nz", "pa", "sg", "tg", "th", "tw", "uy"]
     medium_flags = ["ma", "fi", "fo", "is", "no", "se", "tn"]
+    eu_flags = ['at', 'be', 'bg', 'hr', 'cy', 'cz', 'dk', 'ee', 'fi', 'fr',
+                'de', 'gr', 'hu', 'ie', 'it', 'lv', 'lt', 'lu', 'mt', 'nl',
+                'po', 'pt', 'ro', 'sk', 'si', 'es', 'se']
+
+    # Add all flags to the map
+    cert_ages = {}
     for country_alpha_2, country_data in flags_to_add.items():
         log.debug("Adding {} ({}) flag".format(country_alpha_2, country_data[0].name))
         if country_alpha_2.lower() in big_flags:
@@ -147,24 +177,57 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
             width = 30
         x = coords[country_alpha_2.lower()]["x"]
         y = coords[country_alpha_2.lower()]["y"]
-        add_flag(flags_dir, tree, layer, country_alpha_2, x, y, width)
+        add_flag(flags_dir, tree, layer, country_alpha_2,
+                 x, y, VERTICAL_ALIGN_TOP, width,
+                 r"flag-{}")
+        if country_alpha_2.lower() not in eu_flags:
+            cert_ages[country_data[1]] = country_alpha_2
 
     log.info("Done adding {} flags.".format(len(flags_to_add)))
 
     # Update the map with today's date
     today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-    root = tree.getroot()
-    namespaces_for_xpath = {ns: url for ns, url in root.nsmap.items() if ns}
-    text_element_id = "map-updated-text"
-    text_element_id_encoded = fromstring(text_element_id)
-    updated_text_element = root.xpath(r'.//svg:tspan[@id="{}"]'.format(text_element_id_encoded.text),
-                                      namespaces=namespaces_for_xpath)
-    updated_text_element[0].text = today
-    log.info("Updated map with datestamp: {}".format(today))
+    updated_text_element = _find_text_element(tree, "map-updated-text")
+    if updated_text_element is not None:
+        updated_text_element.text = today
+        log.info("Updated map with datestamp: {}".format(today))
+    else:
+        log.warning("Did not update datestamp. Text-element not found.")
+
+    # Create timeline of non-EU countries
+    timeline_layer = _find_layer(tree, "Timeline")
+    if timeline_layer is not None:
+        log.info("Updating non-EU flags timeline")
+        tl_begin_text_element = _find_text_element(tree, "timeline-begin")
+        tl_end_text_element = _find_text_element(tree, "timeline-end")
+        ages = sorted(list(cert_ages.keys()))
+        oldest_cert = ages[0]
+        newest_cert = ages[-1:][0]
+        log.info("Oldest cert is {} ({})".format(cert_ages[oldest_cert], oldest_cert))
+        log.info("Newest cert is {} ({})".format(cert_ages[newest_cert], newest_cert))
+
+        tl_begin_text_element.text = oldest_cert.strftime('%b %Y')
+        tl_end_text_element.text = newest_cert.strftime('%b %Y')
+
+        flags_y = 1490.0
+        flags_start_x = 730
+        flags_width = 1655
+
+        days = (newest_cert - oldest_cert).days
+        day_in_pixels = flags_width / days
+        for cert_date in ages:
+            country_alpha_2 = cert_ages[cert_date]
+            days = (cert_date - oldest_cert).days
+            x_pos = flags_start_x + day_in_pixels * days
+            add_flag(flags_dir, tree, timeline_layer, country_alpha_2,
+                     x_pos, flags_y, VERTICAL_ALIGN_BOTTOM, 40,
+                     r"timeline-flag-{}")
+        log.info("Done adding {} flags into timeline.".format(len(cert_ages)))
 
 
-def add_flag(flags_dir: str, tree: etree.ElementTree, layer: etree.Element,
-             alpha_2: str, flag_x: float, flag_y: float, width: int) -> None:
+def add_flag(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, alpha_2: str,
+             flag_x: float, flag_y_in: float, vertical_align: str, width: int,
+             id_format: str) -> None:
     """
     <image preserveAspectRatio="none"
         inkscape:svg-dpi="96"
@@ -185,6 +248,12 @@ def add_flag(flags_dir: str, tree: etree.ElementTree, layer: etree.Element,
     svg_flag = open(flag_path, "rb").read()
     img_width, img_height = _get_svg_size(svg_flag)
     _, height = _calculate_new_size_for_fixed_width(img_width, img_height, width)
+    if vertical_align == VERTICAL_ALIGN_TOP:
+        flag_y = flag_y_in
+    elif vertical_align == VERTICAL_ALIGN_BOTTOM:
+        flag_y = flag_y_in - height
+    else:
+        raise ValueError("Don't know how to handle vertical align '{}'!".format(vertical_align))
 
     encoded = base64.b64encode(svg_flag).decode('ascii')
 
@@ -192,7 +261,7 @@ def add_flag(flags_dir: str, tree: etree.ElementTree, layer: etree.Element,
     inkscape_ns = root.nsmap["inkscape"]
     xlink_ns = root.nsmap["xlink"]
     # <image/> https://developer.mozilla.org/en-US/docs/Web/SVG/Element/image
-    flag_element = etree.Element("image", id="flag-{}".format(alpha_2.lower()))
+    flag_element = etree.Element("image", id=id_format.format(alpha_2.lower()))
     flag_element.attrib[etree.QName(inkscape_ns, "svg-dpi")] = "96"
     flag_element.attrib[
         "preserveAspectRatio"] = "None"  # https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/preserveAspectRatio
@@ -202,6 +271,48 @@ def add_flag(flags_dir: str, tree: etree.ElementTree, layer: etree.Element,
     flag_element.attrib["x"] = str(flag_x)
     flag_element.attrib["y"] = str(flag_y)
     flag_element.attrib[etree.QName(xlink_ns, "href")] = "data:image/svg+xml;base64," + encoded
+
+    layer.append(flag_element)
+
+
+def use_flag(flags_dir: str, tree: etree.ElementTree, layer: etree.Element,
+             alpha_2: str, flag_x: float, flag_y: float, width: int) -> None:
+    """
+    <use preserveAspectRatio="none"
+        inkscape:svg-dpi="96"
+        width="688.28601"
+        height="481.80023"
+        style="image-rendering:optimizeQuality"
+        id="image6337"
+        x="926.95697"
+        y="237.90031"
+        xlink:href="#texture"
+        />
+    :return:
+    """
+    flag_path = "{}/{}.svg".format(flags_dir, alpha_2)
+    if not os.path.exists(flag_path):
+        raise RuntimeError("Flag for country {} doesn't exist in {}!".format(alpha_2, flags_dir))
+
+    svg_flag = open(flag_path, "rb").read()
+    img_width, img_height = _get_svg_size(svg_flag)
+    _, height = _calculate_new_size_for_fixed_width(img_width, img_height, width)
+
+    root = tree.getroot()
+    inkscape_ns = root.nsmap["inkscape"]
+    # xlink_ns = root.nsmap["xlink"]
+    # <use/> https://developer.mozilla.org/en-US/docs/Web/SVG/Element/use
+    flag_element = etree.Element("use", id="used-flag-{}".format(alpha_2.lower()))
+    flag_element.attrib[etree.QName(inkscape_ns, "svg-dpi")] = "96"
+    flag_element.attrib[
+        "preserveAspectRatio"] = "None"  # https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/preserveAspectRatio
+    flag_element.attrib["width"] = str(width)
+    flag_element.attrib["height"] = str(height)
+    flag_element.attrib["style"] = "image-rendering:optimizeQuality"
+    flag_element.attrib["x"] = str(flag_x)
+    flag_element.attrib["y"] = str(flag_y)
+    # flag_element.attrib[etree.QName(xlink_ns, "href")] = "#flag-{}".format(alpha_2.lower())
+    flag_element.attrib["href"] = "#flag-{}".format(alpha_2.lower())
 
     layer.append(flag_element)
 
@@ -241,7 +352,7 @@ def _calculate_new_size_for_fixed_width(width: int, height: int, new_width: int)
 
 def save_map(filename: str, tree: etree.ElementTree) -> None:
     root = tree.getroot()
-    tree.write(filename, pretty_print=True)
+    tree.write(filename, pretty_print=False)
     # str = etree.tostring(root, pretty_print=True)
 
     log.info("Wrote SVG into {}".format(filename))
@@ -293,7 +404,7 @@ def save_map_png_inkscape(svg_filename: str, output_filename: str) -> None:
         "/usr/bin/inkscape",
         "--without-gui",
         "-f", svg_filename,
-        #"--export-area-page",
+        # "--export-area-page",
         "--export-area={}:{}:{}:{}".format(export_start_x, 0, export_width + export_start_x, image_height),
         "-w", str(export_width),
         "-h", str(image_height),
@@ -332,7 +443,7 @@ def main() -> None:
     if args.png_output_file:
         # save_map_png_cairo(flag_svg, args.png_output_file)
         # save_map_png_pyvips(flag_svg, args.png_output_file)
-        #save_map_png_html2image(args.world_map_svg_out, args.png_output_file)
+        # save_map_png_html2image(args.world_map_svg_out, args.png_output_file)
         save_map_png_inkscape(args.world_map_svg_out, args.png_output_file)
 
 
