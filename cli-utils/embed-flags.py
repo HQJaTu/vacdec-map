@@ -284,13 +284,19 @@ def save_map_png_html2image(svg_filename: str, output_filename: str) -> None:
 def save_map_png_inkscape(svg_filename: str, output_filename: str) -> None:
     import subprocess
 
+    # https://inkscape.org/doc/inkscape-man.html
+    image_width = 4500
+    image_height = 2234
+    export_width = 3600
+    export_start_x = 580
     args = [
         "/usr/bin/inkscape",
         "--without-gui",
         "-f", svg_filename,
-        "--export-area-page",
-        "-w", str(4500),
-        "-h", str(2234),
+        #"--export-area-page",
+        "--export-area={}:{}:{}:{}".format(export_start_x, 0, export_width + export_start_x, image_height),
+        "-w", str(export_width),
+        "-h", str(image_height),
         "--export-png", output_filename
     ]
     print(args)
