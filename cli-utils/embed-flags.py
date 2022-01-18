@@ -210,7 +210,11 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         tl_end_text_element.text = newest_cert.strftime('%b %Y')
 
         flags_y = 1490.0
+        flags_current_y = flags_y
+        flags_rise = 15
         flags_start_x = 730
+        last_flag_x = 0
+        last_flag_cleared_pixels = 35
         flags_width = 1655
 
         days = (newest_cert - oldest_cert).days
@@ -219,9 +223,17 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
             country_alpha_2 = cert_ages[cert_date]
             days = (cert_date - oldest_cert).days
             x_pos = flags_start_x + day_in_pixels * days
+            if last_flag_x > x_pos - last_flag_cleared_pixels:
+                # Too close to previous flag, need to make this flag higher.
+                flags_current_y -= flags_rise
+            else:
+                # Enough space, make this flag on level
+                flags_current_y = flags_y
+
             add_flag(flags_dir, tree, timeline_layer, country_alpha_2,
-                     x_pos, flags_y, VERTICAL_ALIGN_BOTTOM, 40,
+                     x_pos, flags_current_y, VERTICAL_ALIGN_BOTTOM, 40,
                      r"timeline-flag-{}")
+            last_flag_x = x_pos
         log.info("Done adding {} flags into timeline.".format(len(cert_ages)))
 
 
