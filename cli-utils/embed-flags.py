@@ -98,6 +98,11 @@ def get_country_list(certs_dir: str) -> dict:
 
 
 def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, flags_to_add: dict):
+    # Workflow:
+    # 1) Edit with Inkscape
+    # 2) run ./cli-utils/extract-flag-coords.py
+    # 3) copy output here
+    # 4) done!
     coords = {
         "ad": {'x': 1085.5621, 'y': 394.10989},
         "ae": {'x': 1580.153, 'y': 575.99744},
@@ -106,6 +111,7 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         "at": {'x': 1203.35, 'y': 344.36911},
         "be": {'x': 1115.4531, 'y': 308.54907},
         "bg": {'x': 1301.6404, 'y': 395.43692},
+        "bj": {'x': 1094.6628, 'y': 739.98236},
         "ch": {'x': 1153.8079, 'y': 346.05908},
         "cv": {'x': 831.10962, 'y': 668.24146},
         "cy": {'x': 1362.1937, 'y': 479.65173},
@@ -126,6 +132,7 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         "il": {'x': 1392.0938, 'y': 508.71915},
         "is": {'x': 958.49701, 'y': 167.44846},
         "it": {'x': 1216.0157, 'y': 412.02322},
+        "jo": {'x': 1402.2361, 'y': 529.67798},
         "lb": {'x': 1395.8834, 'y': 483.37332},
         "li": {'x': 1178.8207, 'y': 339.95197},
         "lt": {'x': 1276.1283, 'y': 266.85205},
@@ -150,7 +157,7 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         "si": {'x': 1232.3268, 'y': 364.76022},
         "sk": {'x': 1249.8861, 'y': 332.47128},
         "sm": {'x': 1178.0165, 'y': 380.46756},
-        "tg": {'x': 1074.299, 'y': 761.35895},
+        "tg": {'x': 1074.299, 'y': 768.24188},
         "th": {'x': 2014.0585, 'y': 681.883},
         "tn": {'x': 1153.8108, 'y': 479.65976},
         "tr": {'x': 1368.3807, 'y': 434.96408},
@@ -159,7 +166,7 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         "uy": {'x': 565.23145, 'y': 1200.6425},
         "va": {'x': 1183.5472, 'y': 405.28656},
     }
-    big_flags = ["ae", "cv", "nz", "pa", "sg", "tg", "th", "tw", "uy"]
+    big_flags = ["ae", "cv", "nz", "pa", "sg", "th", "tw", "uy"]
     medium_flags = ["ma", "fi", "fo", "is", "no", "se", "tn"]
     eu_flags = ['at', 'be', 'bg', 'hr', 'cy', 'cz', 'dk', 'ee', 'fi', 'fr',
                 'de', 'gr', 'hu', 'ie', 'it', 'lv', 'lt', 'lu', 'mt', 'nl',
@@ -168,19 +175,24 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
     # Add all flags to the map
     cert_ages = {}
     for country_alpha_2, country_data in flags_to_add.items():
+        ca2 = country_alpha_2.lower()
+        if ca2 not in coords:
+            raise NotImplementedError("Country {} ({}) not implemented yet! Define coords first.".format(
+                country_alpha_2, country_data[0].name)
+            )
         log.debug("Adding {} ({}) flag".format(country_alpha_2, country_data[0].name))
-        if country_alpha_2.lower() in big_flags:
+        if ca2 in big_flags:
             width = 100
-        elif country_alpha_2.lower() in medium_flags:
+        elif ca2 in medium_flags:
             width = 50
         else:
             width = 30
-        x = coords[country_alpha_2.lower()]["x"]
-        y = coords[country_alpha_2.lower()]["y"]
+        x = coords[ca2]["x"]
+        y = coords[ca2]["y"]
         add_flag(flags_dir, tree, layer, country_alpha_2,
                  x, y, VERTICAL_ALIGN_TOP, width,
                  r"flag-{}")
-        if country_alpha_2.lower() not in eu_flags:
+        if ca2 not in eu_flags:
             cert_ages[country_data[1]] = country_alpha_2
 
     log.info("Done adding {} flags.".format(len(flags_to_add)))
