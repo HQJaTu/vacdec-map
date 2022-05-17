@@ -162,16 +162,17 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         "sm": {'x': 1178.0165, 'y': 380.46756},
         "sv": {'x': 196.52727, 'y': 699.60449},
         "tg": {'x': 1074.299, 'y': 768.24188},
-        "th": {'x': 2014.0585, 'y': 681.883},
+        "th": {'x': 2012.6313, 'y': 673.79614},
         "tn": {'x': 1153.8108, 'y': 479.65976},
         "tr": {'x': 1368.3807, 'y': 434.96408},
         "tw": {'x': 2172.4629, 'y': 610.41534},
         "ua": {'x': 1351.5739, 'y': 330.82819},
         "uy": {'x': 565.23145, 'y': 1200.6425},
         "va": {'x': 1183.5472, 'y': 405.28656},
+        "vn": {'x': 2101.1248, 'y': 697.07733},
     }
-    big_flags = ["ae", "co", "cv", "id", "nz", "sv", "th", "tw", "uy"]
-    medium_flags = ["fi", "fo", "is", "ma", "my", "no", "pa", "se", "sg", "tn"]
+    big_flags = ["ae", "co", "cv", "id", "nz", "sv", "tw", "uy"]
+    medium_flags = ["fi", "fo", "is", "ma", "my", "no", "pa", "se", "sg", "th", "tn", "vn"]
     eu_flags = ['at', 'be', 'bg', 'hr', 'cy', 'cz', 'dk', 'ee', 'fi', 'fr',
                 'de', 'gr', 'hu', 'ie', 'it', 'lv', 'lt', 'lu', 'mt', 'nl',
                 'po', 'pt', 'ro', 'sk', 'si', 'es', 'se']
