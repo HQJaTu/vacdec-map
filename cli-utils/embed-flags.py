@@ -155,6 +155,7 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         "pt": {'x': 997.79785, 'y': 430.19284},
         "ro": {'x': 1300.359, 'y': 367.39563},
         "rs": {'x': 1259.1129, 'y': 388.67386},
+        "sc": {'x': 1562.5601, 'y': 885.22693},
         "se": {'x': 1205.4993, 'y': 204.00682},
         "sg": {'x': 2055.7974, 'y': 840.48474},
         "si": {'x': 1232.3268, 'y': 364.76022},
@@ -171,7 +172,7 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         "va": {'x': 1183.5472, 'y': 405.28656},
         "vn": {'x': 2101.1248, 'y': 697.07733},
     }
-    big_flags = ["ae", "co", "cv", "id", "nz", "sv", "tw", "uy"]
+    big_flags = ["ae", "co", "cv", "id", "nz", "sc", "sv", "tw", "uy"]
     medium_flags = ["fi", "fo", "is", "ma", "my", "no", "pa", "se", "sg", "th", "tn", "vn"]
     eu_flags = ['at', 'be', 'bg', 'hr', 'cy', 'cz', 'dk', 'ee', 'fi', 'fr',
                 'de', 'gr', 'hu', 'ie', 'it', 'lv', 'lt', 'lu', 'mt', 'nl',
