@@ -31,17 +31,22 @@ import logging
 log = logging.getLogger(__name__)
 WIKIPEDIA_API_BASE_URL = r"https://en.wikipedia.org/w/api.php"
 WIKIPEDIA_FLAGS_PAGE_TITLE = r"Gallery_of_sovereign_state_flags"
+WIKIPEDIA_HUMAN_READABLE_PAGE = r"https://en.wikipedia.org/wiki/Gallery_of_sovereign_state_flags"
 rest_user_agent = 'FlagImporter/0.1'
 timeout = 5.0
 
 
-def _setup_logger() -> None:
+def _setup_logger(log_level_in: str) -> None:
     log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setFormatter(log_formatter)
     console_handler.propagate = False
     log.addHandler(console_handler)
-    log.setLevel(logging.DEBUG)
+
+    if log_level_in.upper() not in logging._nameToLevel:
+        raise ValueError("Unkown logging level '{}'!".format(log_level_in))
+    log_level = logging._nameToLevel[log_level_in.upper()]
+    log.setLevel(log_level)
 
 
 def _get_http_client() -> requests.Session:
@@ -56,8 +61,11 @@ def _get_http_client() -> requests.Session:
 
 
 def get_flag_list(s: requests.Session) -> dict:
+    # Not all required flags for Vacdec are in the "all" pages Wikipedia page
+    # Mimic pycountry record with flag in a tuple
     extra_flags = [
-        ("FO", "Faroe Islands", "File:Flag of the Faroe Islands.svg")
+        ("FO", "Faroe Islands", "File:Flag of the Faroe Islands.svg"),
+        ("HK", "Hong Kong", "File:Flag_of_Hong_Kong.svg")
     ]
 
     page_query = {
@@ -75,22 +83,28 @@ def get_flag_list(s: requests.Session) -> dict:
 
     # Helping hand to bridge the cap between Wikipedia and pycountry
     # Data from: https://github.com/flyingcircusio/pycountry/blob/master/src/pycountry/databases/iso3166-1.json
+    # Dict:
+    # - key = Wikipedia flags page country name
+    # - value = pycountry country name
     exceptions = {
+        "Afghanistan, Islamic Emirate of": "Afghanistan",
+        "Afghanistan, Islamic Republic of": None,  # Suppress the old name
+        "Bahamas, The": "Bahamas",
         "Cape Verde": "Cabo Verde",
-        "Democratic Republic of the Congo": "Congo, The Democratic Republic of the",
+        "Congo, Democratic Republic of the": "Congo, The Democratic Republic of the",
+        "Congo, Republic of the": "Congo",
         "East Timor": "Timor-Leste",
+        "Gambia, The": "Gambia",
         "Ivory Coast": "Côte d'Ivoire",
+        "Korea, North": "Korea, Democratic People's Republic of",
+        "Korea, South": "Korea, Republic of",
         "Laos": "Lao People's Democratic Republic",
-        "Artsakh": None,
-        # unrecognized country in the South Caucasus which is de facto independent, de jure considered a part of Azerbaijan,
+        "Artsakh": None,  # unrecognized country in the South Caucasus which is de facto independent, de jure considered a part of Azerbaijan,
         "Northern Cyprus": None,  # Flag of the Turkish Republic of Northern Cyprus
-        "Somaliland": None,
-        # de facto sovereign state in the Horn of Africa, considered by most states to be part of Somalia
-        "South Ossetia": None,
-        # Georgian government and most members of the United Nations consider the territory part of Georgia
+        "Sahrawi Arab Democratic Republic": "Western Sahara",
+        "Somaliland": None,  # de facto sovereign state in the Horn of Africa, considered by most states to be part of Somalia
+        "South Ossetia": None,  # Georgian government and most members of the United Nations consider the territory part of Georgia
         "Transnistria": None,  # an unrecognised breakaway state that is internationally recognised as part of Moldova
-        "North Korea": "Korea, Democratic People's Republic of",
-        "South Korea": "Korea, Republic of",
     }
 
     flags_out = {}
@@ -109,6 +123,7 @@ def get_flag_list(s: requests.Session) -> dict:
             country_name = exceptions[country_name]
 
         # Go query!
+        log.debug("Lookup for country name: {}".format(country_name))
         try:
             country_data = countries.lookup(country_name)
         except LookupError:
@@ -120,22 +135,25 @@ def get_flag_list(s: requests.Session) -> dict:
                 country_data = None
             if not country_data:
                 raise LookupError(
-                    "Country '{}' not found in DB nor exception-list! Cannot proceed.".format(country_name))
+                    "Country '{}' not found in pycountry DB nor exception-list! Cannot proceed. "
+                    "See page for flags: {}".format(country_name, WIKIPEDIA_HUMAN_READABLE_PAGE)
+                )
             country_data = country_data[0]
 
         flag_data = _get_flag_data(s, country_data, country_name, flag_file)
         flags_out[country_data.alpha_2] = flag_data
-        flag_file = "File:Flag of the Faroe Islands.svg"
         log.debug("{} ({}): {}, URL: {}".format(country_name, country_data.alpha_2, flag_file, flag_data['image_url']))
 
     log.info("Done listing {} flags from Wikipedia.".format(len(flags_out)))
 
+    # Do more flags?
     for extra in extra_flags:
         country_data = countries.get(alpha_2=extra[0])
         country_name = extra[1]
         flag_file = extra[2]
         flag_data = _get_flag_data(s, country_data, country_name, flag_file)
-        log.debug("Extra flag {} ({}): {}, URL: {}".format(country_name, country_data.alpha_2, flag_file, flag_data['image_url']))
+        log.debug("Extra flag {} ({}): {}, URL: {}".format(country_name, country_data.alpha_2, flag_file,
+                                                           flag_data['image_url']))
         flags_out[country_data.alpha_2] = flag_data
 
     log.info("Did total of {} flags.".format(len(flags_out)))
@@ -220,8 +238,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description='World flags importer')
     parser.add_argument('--destination-dir', metavar="DESTINATION-DIRECTORY",
                         help='Save downloaded files into the directory')
+    parser.add_argument('--log-level', default="WARNING",
+                        help='Set logging level (CRITICAL, FATAL, ERROR, WARNING, INFO, DEBUG). '
+                             'Python default is: WARNING')
     args = parser.parse_args()
-    _setup_logger()
+    _setup_logger(args.log_level)
 
     session = _get_http_client()
     list_of_flags = get_flag_list(session)
