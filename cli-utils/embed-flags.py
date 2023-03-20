@@ -185,16 +185,21 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
     medium_flags = ["ae", "bh", "fi", "fo", "is", "hk", "ma", "my", "no", "om", "pa", "se", "sg", "th", "tn", "vn"]
     eu_flags = ['at', 'be', 'bg', 'hr', 'cy', 'cz', 'dk', 'ee', 'fi', 'fr',
                 'de', 'gr', 'hu', 'ie', 'it', 'lv', 'lt', 'lu', 'mt', 'nl',
-                'po', 'pt', 'ro', 'sk', 'si', 'es', 'se']
+                'pl', 'pt', 'ro', 'sk', 'si', 'es', 'se']
 
     # Add all flags to the map
-    cert_ages = {}
+    noneu_cert_ages = {}
+    seen_flags_count = 0
+    seen_noneu_flag_count = 0
+    seen_eu_flags = set(eu_flags)
     for country_alpha_2, country_data in flags_to_add.items():
         ca2 = country_alpha_2.lower()
         if ca2 not in coords:
             raise NotImplementedError("Country {} ({}) not implemented yet! Define coords first.".format(
                 country_alpha_2, country_data[0].name)
             )
+
+        seen_flags_count += 1
         log.debug("Adding {} ({}) flag".format(country_alpha_2, country_data[0].name))
         if ca2 in big_flags:
             width = 100
@@ -207,10 +212,20 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         add_flag(flags_dir, tree, layer, country_alpha_2,
                  x, y, VERTICAL_ALIGN_TOP, width,
                  r"flag-{}")
-        if ca2 not in eu_flags:
-            cert_ages[country_data[1]] = country_alpha_2
 
-    log.info("Done adding {} flags.".format(len(flags_to_add)))
+        # Add flag to timeline too
+        if ca2 not in eu_flags:
+            noneu_cert_ages[country_data[1]] = country_alpha_2
+            seen_noneu_flag_count += 1
+        else:
+            # EU-flags don't go to timeline
+            seen_eu_flags.remove(ca2)
+
+    log.info("Done adding {} flags to globe.".format(len(flags_to_add)))
+    if seen_eu_flags:
+        log.warning("Not added EU-countries: {}".format(', '.join(list(seen_eu_flags))))
+    else:
+        log.info("All EU-countries seen")
 
     # Update the map with today's date
     today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
@@ -227,11 +242,11 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         log.info("Updating non-EU flags timeline")
         tl_begin_text_element = _find_text_element(tree, "timeline-begin")
         tl_end_text_element = _find_text_element(tree, "timeline-end")
-        ages = sorted(list(cert_ages.keys()))
+        ages = sorted(list(noneu_cert_ages.keys()))
         oldest_cert = ages[0]
         newest_cert = ages[-1:][0]
-        log.info("Oldest cert is {} ({})".format(cert_ages[oldest_cert], oldest_cert))
-        log.info("Newest cert is {} ({})".format(cert_ages[newest_cert], newest_cert))
+        log.debug("Oldest cert is {} ({})".format(noneu_cert_ages[oldest_cert], oldest_cert))
+        log.debug("Newest cert is {} ({})".format(noneu_cert_ages[newest_cert], newest_cert))
 
         tl_begin_text_element.text = oldest_cert.strftime('%b %Y')
         tl_end_text_element.text = newest_cert.strftime('%b %Y')
@@ -247,7 +262,7 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
         days = (newest_cert - oldest_cert).days
         day_in_pixels = flags_width / days
         for cert_date in ages:
-            country_alpha_2 = cert_ages[cert_date]
+            country_alpha_2 = noneu_cert_ages[cert_date]
             days = (cert_date - oldest_cert).days
             x_pos = flags_start_x + day_in_pixels * days
             if last_flag_x > x_pos - last_flag_cleared_pixels:
@@ -261,7 +276,18 @@ def add_flags(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, fla
                      x_pos, flags_current_y, VERTICAL_ALIGN_BOTTOM, 40,
                      r"timeline-flag-{}")
             last_flag_x = x_pos
-        log.info("Done adding {} flags into timeline.".format(len(cert_ages)))
+        log.info("Done adding {} flags into timeline.".format(len(noneu_cert_ages)))
+
+    # Update the map with number of flags added
+    flag_count = "Total of {} countries found, {} outside EU".format(seen_flags_count, seen_noneu_flag_count)
+    updated_text_element = _find_text_element(tree, "map-countries-count-text")
+    if updated_text_element is not None:
+        updated_text_element.text = flag_count
+        log.info("Updated map with flag count: {}".format(seen_flags_count))
+    else:
+        log.warning("Did not update flag count. Text-element not found.")
+
+    log.info("Map update done.")
 
 
 def add_flag(flags_dir: str, tree: etree.ElementTree, layer: etree.Element, alpha_2: str,
