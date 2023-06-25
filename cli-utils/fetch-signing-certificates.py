@@ -34,7 +34,9 @@ TRUST_LIST_AUSTRIA_SHA2_HASH_URL = "https://dgc-trust.qr.gv.at/trustlistsig"
 # Cert's Validity:
 #             Not Before: May 19 12:09:49 2022 GMT
 #             Not After : Jun 19 12:09:49 2023 GMT
-# Having this hard-coded is rather stupid! GitHub page was updated on 3rd Jun 2022 with new cert.
+# Having this hard-coded is rather stupid!
+# 1) GitHub page was updated on 3rd Jun 2022 with new cert to replace expired one
+# 2) 25th Jun 2023 there is no new cert to replace expired one
 TRUST_LIST_AUSTRIA_ROOT_CERT = """
 -----BEGIN CERTIFICATE-----
 MIIB1DCCAXmgAwIBAgIKAYDcOWBmNxlPgDAKBggqhkjOPQQDAjBEMQswCQYDVQQG
@@ -53,7 +55,6 @@ yEepU0gCIQCGaqJpOwPXBmgoOsehnJkA0+TZX8V2p1Bg/nqnuYqXFg==
 API_ENDPOINT_AUSTRIA_V2 = "https://greencheck.gv.at/api/v2/masterdata"
 API_AUSTRIA_V2_CLIENT_VERSION = "1.12"
 
-
 # Swedish govt official endpoints:
 TRUST_LIST_SWEDEN_URL = "https://dgcg.covidbevis.se/tp/trust-list"
 TRUST_LIST_SWEDEN_SIG_URL = "https://dgcg.covidbevis.se/tp/cert"
@@ -69,11 +70,11 @@ def _setup_logger() -> None:
     log.setLevel(logging.INFO)
 
 
-def fetch_certificates(country_to_use: str, destination_dir: str) -> dict:
+def fetch_certificates(country_to_use: str, destination_dir: str, ignore_trust_anchor_signature_failure: bool) -> dict:
     if country_to_use == TRUST_LIST_COUNTRY_AUSTRIA:
-        return fetch_certificates_austria_api(destination_dir)
+        return fetch_certificates_austria_api(destination_dir, ignore_trust_anchor_signature_failure)
     elif country_to_use == TRUST_LIST_COUNTRY_SWEDEN:
-        return fetch_certificates_sweden_api(destination_dir)
+        return fetch_certificates_sweden_api(destination_dir, ignore_trust_anchor_signature_failure)
 
     raise ValueError("Don't know what to do with country {0}!".format(country_to_use))
 
@@ -197,7 +198,7 @@ def fetch_certificates_austria_api_old(destination_dir: str) -> dict:
     return _save_certs(cert_list["c"], destination_dir)
 
 
-def fetch_certificates_austria_api(destination_dir: str) -> dict:
+def fetch_certificates_austria_api(destination_dir: str, ignore_trust_anchor_signature_failure: bool) -> dict:
     log.debug("Get trust list from Austria endpoint: {}".format(TRUST_LIST_AUSTRIA_URL))
 
     # This code adapted from Panzi's code at:
@@ -216,7 +217,9 @@ def fetch_certificates_austria_api(destination_dir: str) -> dict:
     root_cert_key_id = sig_msg.phdr.get(headers.KID) or sig_msg.uhdr[headers.KID]
     key_id = root_cert.fingerprint(hazmat.primitives.hashes.SHA256())[:8]
     if key_id != root_cert_key_id:
-        raise RuntimeError("Downloaded payload is not is not signed with Austrian trust anchor!")
+        if not ignore_trust_anchor_signature_failure:
+            raise RuntimeError("Downloaded payload is not is not signed with Austrian trust anchor!")
+        log.warning("Downloaded payload is not is not signed with Austrian trust anchor! Ignoring as requested.")
 
     # Verify the SHA2 hash signature.
     root_key = _cert_to_cose_key(root_cert)
@@ -326,11 +329,14 @@ def main() -> None:
                         help='Trust list source country. Default: {0}'.format(TRUST_LIST_COUNTRY_AUSTRIA))
     parser.add_argument('--cert-directory', default=DEFAULT_CERTS_DIR,
                         help="Destination directory to save certificates into. Default: {}".format(DEFAULT_CERTS_DIR))
+    parser.add_argument('--ignore-trust-signature-failure',
+                        action="store_true",
+                        help="Retrieved signature list is signed with a known certificate. Ignore validation error.")
 
     args = parser.parse_args()
     _setup_logger()
 
-    fetch_certificates(args.country_trust_list, args.cert_directory)
+    fetch_certificates(args.country_trust_list, args.cert_directory, args.ignore_trust_signature_failure)
 
 
 if __name__ == '__main__':
